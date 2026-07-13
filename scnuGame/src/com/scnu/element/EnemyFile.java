@@ -4,15 +4,12 @@ import java.awt.Color;
 import java.awt.Graphics;
 
 /**
- * 玩家子弹
+ * 敌人子弹类（黄色）
  */
-public class PlayFile extends ElementObj {
+public class EnemyFile extends ElementObj {
 	private int attack = 1;
-	private int moveNum = 3; // 速度 = 玩家移速 × 3（默认3=1×3）
+	private int moveNum = 3;
 	private String fx;
-
-	public PlayFile() {
-	}
 
 	@Override
 	public ElementObj createElement(String str) {
@@ -32,9 +29,6 @@ public class PlayFile extends ElementObj {
 			case "a":
 				this.attack = Integer.parseInt(kv[1]);
 				break;
-			case "s":
-				this.moveNum = Integer.parseInt(kv[1]) * 3;
-				break;
 			}
 		}
 		changeLocate();
@@ -45,7 +39,7 @@ public class PlayFile extends ElementObj {
 
 	@Override
 	public void showElement(Graphics g) {
-		g.setColor(Color.red);
+		g.setColor(Color.yellow);
 		g.fillOval(this.getX(), this.getY(), this.getW(), this.getH());
 	}
 
@@ -75,8 +69,9 @@ public class PlayFile extends ElementObj {
 	public void pkByOther(ElementObj other) {
 		if (other instanceof MapObj) {
 			String type = ((MapObj) other).getType();
-			if ("river".equals(type) || "grass".equals(type))
+			if ("river".equals(type) || "grass".equals(type)) {
 				return;
+			}
 		}
 		this.die();
 	}
@@ -109,4 +104,3 @@ public class PlayFile extends ElementObj {
 		}
 	}
 }
-
