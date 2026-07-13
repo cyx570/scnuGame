@@ -1,88 +1,135 @@
 package com.scnu.show;
 
-import java.awt.event.KeyListener;
-import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
+import java.awt.CardLayout;
+import java.awt.Component;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+
+import com.scnu.controller.GameListener;
+import com.scnu.controller.GameThread;
+import com.scnu.manager.ElementManager;
 
 /**
- * @说明:游戏窗体 实现的主要功能:关闭 显示，最大最小化
- * @功能说明:需要嵌入面板，启动主线程等等
- * @窗体说明 swing awt 窗体大小(记录用户上次使用的软件窗体样式)
- * 
- * @分析 	1.面板绑定到窗体
- * 	    2.监听绑定
- * 		3.游戏主线程启动
- * 		4.显示窗体
+ * 游戏主窗体：CardLayout 切换面板
  */
-public class GameJFrame extends JFrame{
-	public static int GameX = 800;
-	public static int GameY = 600;
-	private JPanel jPanel = null;
-	private KeyListener keyListener = null;	//监听
-	private MouseMotionListener mouseMotionListener = null;
-	private MouseListener mouseListener = null;
-	private Thread thread = null;				//游戏主线程
-	
+public class GameJFrame extends JFrame {
+
+	public static final int GameX = 800;
+	public static final int GameY = 600;
+
+	private CardLayout cardLayout;
+	private JPanel container;
+
+	private GameThread gameThread;
+	private Thread renderThread;
+	private GameMainJPanel gamePanel;
+
+	private int currentSaveSlot = 0;
+	private int gameSeq = 0; // 防止过期回调
+
 	public GameJFrame() {
 		init();
 	}
-	
-	public void init() {
-		this.setSize(GameX,GameY);
-		this.setTitle("测试游戏-坦克世界");
+
+	private void init() {
+		this.setSize(GameX, GameY);
+		this.setTitle("坦克大战");
 		this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		this.setLocationRelativeTo(null);
+		this.setResizable(false);
+		cardLayout = new CardLayout();
+		container = new JPanel(cardLayout);
+		this.add(container);
 	}
-	
-	// 拓展-窗体布局: 可以添加存档，读档等按钮布局
-//	public void addButton() {
-//		this.setLayout(manager);
-//	}
-	
-	// 启动方法
+
 	public void start() {
-		if (jPanel != null) {
-			this.add(jPanel);
-		}
-		if (keyListener != null) {
-			this.addKeyListener(keyListener);
-		}
-		if (thread != null) {
-			thread.start();
-		}
-		
-		// 显示界面
+		switchToMainMenu();
 		this.setVisible(true);
-		if(this.jPanel instanceof Runnable) {
-			new Thread((Runnable)this.jPanel).start();
+	}
+
+	// 面板切换
+
+	public void switchToMainMenu() {
+		stopGame();
+		MainMenuJPanel p = new MainMenuJPanel(this);
+		addPanel("menu", p);
+		cardLayout.show(container, "menu");
+	}
+
+	public void switchToLevelSelect() {
+		stopGame();
+		LevelSelectJPanel p = new LevelSelectJPanel(this, currentSaveSlot);
+		addPanel("levelSelect", p);
+		cardLayout.show(container, "levelSelect");
+	}
+
+	public void switchToSaveSelect() {
+		stopGame();
+		SaveSelectJPanel p = new SaveSelectJPanel(this);
+		addPanel("saveSelect", p);
+		cardLayout.show(container, "saveSelect");
+	}
+
+	public void switchToGame(int level, int saveSlot) {
+		stopGame();
+		ElementManager.resetManager();
+
+		final int seq = ++gameSeq;
+
+		GameThread newThread = new GameThread(level, saveSlot, (cleared, lv, slot) -> {
+			SwingUtilities.invokeLater(() -> {
+				if (seq != gameSeq) return;
+				stopGame();
+				switchToLevelSelect();
+			});
+		});
+
+		gamePanel = new GameMainJPanel(this, newThread);
+		GameListener listener = new GameListener(newThread);
+		gameThread = newThread;
+
+		for (java.awt.event.KeyListener kl : this.getKeyListeners()) {
+			this.removeKeyListener(kl);
 		}
-	}
-	
+		this.addKeyListener(listener);
 
-	// set注入
-	public void setjPanel(JPanel jPanel) {
-		this.jPanel = jPanel;
-	}
+		addPanel("game", gamePanel);
+		cardLayout.show(container, "game");
+		this.requestFocus();
 
-	public void setKeyListener(KeyListener keyListener) {
-		this.keyListener = keyListener;
-	}
-
-	public void setMouseMotionListener(MouseMotionListener mouseMotionListener) {
-		this.mouseMotionListener = mouseMotionListener;
+		gameThread.start();
+		renderThread = new Thread(gamePanel);
+		renderThread.start();
 	}
 
-	public void setMouseListener(MouseListener mouseListener) {
-		this.mouseListener = mouseListener;
+	// 内部
+
+	private void stopGame() {
+		if (gameThread != null) {
+			gameThread.stopGame();
+			gameThread = null;
+		}
+		if (renderThread != null) {
+			if (gamePanel != null) gamePanel.stopRendering();
+			renderThread.interrupt();
+			renderThread = null;
+		}
+		gamePanel = null;
 	}
 
-	public void setThread(Thread thread) {
-		this.thread = thread;
+	private void addPanel(String name, JPanel panel) {
+		for (Component c : container.getComponents()) {
+			if (name.equals(c.getName())) {
+				container.remove(c);
+				break;
+			}
+		}
+		panel.setName(name);
+		container.add(panel, name);
 	}
-	
-	
-	
+
+	public int getCurrentSaveSlot() { return currentSaveSlot; }
+	public void setCurrentSaveSlot(int slot) { this.currentSaveSlot = slot; }
 }
