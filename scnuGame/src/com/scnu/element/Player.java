@@ -1,9 +1,9 @@
 package com.scnu.element;
 
 import java.awt.Graphics;
-import java.security.PublicKey;
-import java.util.HashMap;
-import java.util.Map;
+import java.awt.event.KeyEvent;
+import java.awt.Rectangle;
+import java.util.List;
 
 import javax.swing.ImageIcon;
 
@@ -12,155 +12,274 @@ import com.scnu.manager.GameElement;
 import com.scnu.manager.GameLoad;
 
 public class Player extends ElementObj {
-	/**
-	 * 移动属性: 1.单属性 配合方向枚举类型使用;一次只能移动一个方向 2.双属性 上下和左右 3.四属性
-	 */
-	private boolean left = false;
-	private boolean up = false;
-	private boolean right = false;
-	private boolean down = false;
 
-	// 需要变量记录主角面向的方向，默认up
+	private boolean left, up, right, down;
 	private String fx = "up";
-	// 攻击状态false不攻击 true攻击
 	private boolean pkType = false;
-	private ElementObj element;
-	
-	
-	public Player() {};
-	
-	public Player(int x, int y, int w, int h, ImageIcon icon) {
-		super(x, y, w, h, icon);
-		// TODO 自动生成的构造函数存根
+
+	// 基础属性
+	private int attack = 1;
+	private int maxHp = 5;
+	private int hp = 5;
+	private int speed = 1; // 上限 3
+	private long shootInterval = 20; // 下限 5
+
+	// 累计5次升级
+	private int speedCharge = 0;
+	private int attackSpeedCharge = 0;
+	private static final int CHARGE_MAX = 5;
+
+	public Player() {
 	}
-	
+
 	@Override
 	public ElementObj createElement(String str) {
 		String[] split = str.split(",");
 		this.setX(Integer.parseInt(split[0]));
 		this.setY(Integer.parseInt(split[1]));
-		ImageIcon imageIcon = GameLoad.imgMap.get(split[2]);
-		this.setW(imageIcon.getIconWidth());
-		this.setH(imageIcon.getIconHeight());
-		this.setIcon(imageIcon);
-		
+		ImageIcon icon = GameLoad.imgMap.get(split[2]);
+		this.setW(icon.getIconWidth());
+		this.setH(icon.getIconHeight());
+		this.setIcon(icon);
 		return this;
 	}
 
 	@Override
 	public void showElement(Graphics g) {
-		// TODO 自动生成的方法存根
 		g.drawImage(this.getIcon().getImage(), this.getX(), this.getY(), this.getW(), this.getH(), null);
 	}
 
 	@Override
 	public void keyClick(boolean bl, int key) {
-		// TODO 自动生成的方法存根
 		if (bl) {
 			switch (key) {
-			case 65:
-				this.up = false;
-				this.down = false;
-				this.right = false;
-				this.left = true;
-				this.fx="left";
+			case KeyEvent.VK_A:
+				up = false;
+				down = false;
+				right = false;
+				left = true;
+				fx = "left";
 				break;
-			case 87:
-				this.up = true;
-				this.down = false;
-				this.right = false;
-				this.left = false;
-				this.fx = "up";
+			case KeyEvent.VK_W:
+				up = true;
+				down = false;
+				right = false;
+				left = false;
+				fx = "up";
 				break;
-			case 68:
-				this.up = false;
-				this.down = false;
-				this.right = true;
-				this.left = false;
-				this.fx = "right";
+			case KeyEvent.VK_D:
+				up = false;
+				down = false;
+				right = true;
+				left = false;
+				fx = "right";
 				break;
-			case 83:
-				this.up = false;
-				this.down = true;
-				this.right = false;
-				this.left = false;
-				this.fx = "down";
+			case KeyEvent.VK_S:
+				up = false;
+				down = true;
+				right = false;
+				left = false;
+				fx = "down";
 				break;
-			case 32:
-				this.pkType = true;
+			case KeyEvent.VK_SPACE:
+				pkType = true;
 				break;
 			}
 		} else {
 			switch (key) {
-			case 65:
-				this.left = false;
+			case KeyEvent.VK_A:
+				left = false;
 				break;
-			case 87:
-				this.up = false;
+			case KeyEvent.VK_W:
+				up = false;
 				break;
-			case 68:
-				this.right = false;
+			case KeyEvent.VK_D:
+				right = false;
 				break;
-			case 83:
-				this.down = false;
+			case KeyEvent.VK_S:
+				down = false;
 				break;
-			case 32:
-				this.pkType = false;
+			case KeyEvent.VK_SPACE:
+				pkType = false;
+				break;
 			}
 		}
-
 	}
 
 	@Override
 	protected void move() {
-		if (this.left && this.getX() > 0) {
-			this.setX(this.getX() - 1);
+		List<ElementObj> maps = ElementManager.getManager().getElementByKey(GameElement.MAPS);
+		int nx = this.getX(), ny = this.getY();
+		int w = this.getW(), h = this.getH();
+
+		if (left && nx > 0)
+			nx -= speed;
+		if (up && ny > 0)
+			ny -= speed;
+		if (right && nx < 800 - 2 * w)
+			nx += speed;
+		if (down && ny < 600 - 2 * h)
+			ny += speed;
+
+		if (nx != getX()) {
+			Rectangle r = new Rectangle(nx, getY(), w, h);
+			boolean ok = true;
+			for (ElementObj m : maps)
+				if (m instanceof MapObj && !((MapObj) m).isPassable() && r.intersects(m.getRectangle())) {
+					ok = false;
+					break;
+				}
+			if (ok)
+				for (ElementObj e : ElementManager.getManager().getElementByKey(GameElement.ENEMY))
+					if (e.isLive() && r.intersects(e.getRectangle())) {
+						ok = false;
+						break;
+					}
+			if (ok)
+				for (ElementObj b : ElementManager.getManager().getElementByKey(GameElement.BOSS))
+					if (b.isLive() && r.intersects(b.getRectangle())) {
+						ok = false;
+						break;
+					}
+			if (ok)
+				setX(nx);
 		}
-		if (this.up && this.getY() > 0) {
-			this.setY(this.getY() - 1);
-		}
-		if (this.right && this.getX() < 800 - 2*this.getW()) {
-			this.setX(this.getX() + 1);
-		}
-		if (this.down && this.getY() < 600 - 2*this.getH()) {
-			this.setY(this.getY() + 1);
+		if (ny != getY()) {
+			Rectangle r = new Rectangle(getX(), ny, w, h);
+			boolean ok = true;
+			for (ElementObj m : maps)
+				if (m instanceof MapObj && !((MapObj) m).isPassable() && r.intersects(m.getRectangle())) {
+					ok = false;
+					break;
+				}
+			if (ok)
+				for (ElementObj e : ElementManager.getManager().getElementByKey(GameElement.ENEMY))
+					if (e.isLive() && r.intersects(e.getRectangle())) {
+						ok = false;
+						break;
+					}
+			if (ok)
+				for (ElementObj b : ElementManager.getManager().getElementByKey(GameElement.BOSS))
+					if (b.isLive() && r.intersects(b.getRectangle())) {
+						ok = false;
+						break;
+					}
+			if (ok)
+				setY(ny);
 		}
 	}
-	
+
 	@Override
 	protected void updateImage(long gameTime) {
-		// TODO 自动生成的方法存根
-		this.setIcon(GameLoad.imgMap.get(fx));
+		setIcon(GameLoad.imgMap.get(fx));
 	}
-	
-	private long fileTime=0;
-	/**
-	 * 子弹的添加，需要:发射者坐标，发射者方向
-	 */
+
+	private long fileTime = 0;
+
 	@Override
 	protected void add(long gameTime) {
-		if(!this.pkType) {
+		if (!pkType)
 			return;
-		}
-		if(gameTime - fileTime <= 20) {			
+		if (gameTime - fileTime <= shootInterval)
 			return;
-		}
 		fileTime = gameTime;
-		// TODO 自动生成的方法存根
-		// 传递一个固定格式 {X:3,Y:5,f:up}
-		ElementObj element = new PlayFile().createElement(this.toString());
-		ElementManager.getManager().addElement(element, GameElement.PLAYFILE);
-		
+		ElementManager.getManager().addElement(new PlayFile().createElement(this.toString()), GameElement.PLAYFILE);
+	}
+
+	@Override
+	public void pkByOther(ElementObj other) {
+		if (other instanceof EnemyFile) {
+			hp -= ((EnemyFile) other).getAttack();
+			if (hp <= 0) {
+				hp = 0;
+				die();
+			}
+		}
+	}
+
+	@Override
+	public void die() {
+		setLive(false);
 	}
 
 	@Override
 	public String toString() {
-		// TODO 自动生成的方法存根
-		// {X:3,Y:5,f:up} json格式
-		return "x:" + this.getX() + ",y:" + this.getY() + ",f:" + this.fx;
+		return "x:" + getX() + ",y:" + getY() + ",f:" + fx + ",a:" + attack + ",s:" + speed;
 	}
-	
-	
-	
-	
+
+	// 属性提高
+
+	public void addSpeedCharge() {
+		speedCharge++;
+		if (speedCharge >= CHARGE_MAX) {
+			speedCharge = 0;
+			if (speed < 3)
+				speed++;
+		}
+	}
+
+	public void addAttackSpeedCharge() {
+		attackSpeedCharge++;
+		if (attackSpeedCharge >= CHARGE_MAX) {
+			attackSpeedCharge = 0;
+			long iv = shootInterval - 3;
+			shootInterval = Math.max(iv, 5);
+		}
+	}
+
+	public int getAttack() {
+		return attack;
+	}
+
+	public void setAttack(int a) {
+		this.attack = a;
+	}
+
+	public int getMaxHp() {
+		return maxHp;
+	}
+
+	public void setMaxHp(int m) {
+		this.maxHp = m;
+	}
+
+	public int getHp() {
+		return hp;
+	}
+
+	public void setHp(int h) {
+		this.hp = h;
+	}
+
+	public int getSpeed() {
+		return speed;
+	}
+
+	public void setSpeed(int s) {
+		this.speed = Math.min(s, 3);
+	}
+
+	public long getShootInterval() {
+		return shootInterval;
+	}
+
+	public void setShootInterval(long v) {
+		this.shootInterval = Math.max(v, 5);
+	}
+
+	public int getSpeedCharge() {
+		return speedCharge;
+	}
+
+	public void setSpeedCharge(int v) {
+		this.speedCharge = v;
+	}
+
+	public int getAttackSpeedCharge() {
+		return attackSpeedCharge;
+	}
+
+	public void setAttackSpeedCharge(int v) {
+		this.attackSpeedCharge = v;
+	}
 }
